@@ -1,0 +1,72 @@
+#define BLYNK_TEMPLATE_ID "TMPL3xZDOCqui"
+#define BLYNK_DEVICE_NAME "HealthMonitor"
+#define BLYNK_AUTH_TOKEN "gzP_oy5Wbdc3dx0qVT5OCBzVWFfiSjfp"
+
+#include <WiFi.h>
+#include <Wire.h>
+#include <BlynkSimpleEsp32.h>
+#include "MAX30105.h"
+#include "heartRate.h"
+#include <Adafruit_MLX90614.h>
+
+// WiFi credentials
+char ssid[] = "YourWiFiSSID";
+char pass[] = "YourWiFiPassword";
+
+// Blynk Auth Token
+char auth[] = BLYNK_AUTH_TOKEN;
+
+// Sensor objects
+MAX30105 particleSensor;
+Adafruit_MLX90614 mlx = Adafruit_MLX90614();
+
+// Blynk Timer
+BlynkTimer timer;
+
+void readSensors() {
+  long irValue = particleSensor.getIR();
+
+  if (checkForBeat(irValue)) {
+    static unsigned long lastBeat = 0;
+    unsigned long delta = millis() - lastBeat;
+    lastBeat = millis();
+    float bpm = 60 / (delta / 1000.0);
+    Blynk.virtualWrite(V0, bpm);
+    Serial.print("Heart BPM: ");
+    Serial.println(bpm);
+  }
+
+  float temperature = mlx.readObjectTempC();
+  Blynk.virtualWrite(V2, temperature);
+  Serial.print("Body Temp: ");
+  Serial.println(temperature);
+}
+
+void setup() {
+  Serial.begin(115200);
+  Blynk.begin(auth, ssid, pass);
+  Wire.begin();
+
+  // Init temperature sensor
+  if (!mlx.begin()) {
+    Serial.println("MLX90614 not found!");
+    while (1);
+  }
+
+  // Init MAX30102
+  if (!particleSensor.begin(Wire, I2C_SPEED_STANDARD)) {
+    Serial.println("MAX30102 not found!");
+    while (1);
+  }
+
+  particleSensor.setup(); // Configure with default settings
+  particleSensor.setPulseAmplitudeRed(0x0A);
+  particleSensor.setPulseAmplitudeIR(0x0A);
+
+  timer.setInterval(2000L, readSensors);
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}
